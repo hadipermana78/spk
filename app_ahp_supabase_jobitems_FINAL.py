@@ -796,8 +796,6 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
     global_rows = []
     for group in CRITERIA:
         collects = []
-       c
-
     }
     try:
         pdf_bio = generate_pdf_bytes(payload)
