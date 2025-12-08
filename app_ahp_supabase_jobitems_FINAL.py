@@ -1,5 +1,5 @@
-# app_ahp_supabase.py
-# Streamlit AHP Multi-User — Supabase-backed version with job_items (final)
+# app_ahp_supabase_jobitems_FINAL_fixed.py
+# Streamlit AHP Multi-User — Supabase-backed version with job_items (cleaned & fixed)
 # Requirements: streamlit==1.38.0, supabase==2.3.3, httpx==0.25.2, numpy, pandas, openpyxl, reportlab, altair
 
 import streamlit as st
@@ -13,52 +13,6 @@ import hashlib
 import os
 
 from supabase import create_client
-# Normalisasi job_items agar pasti string
-# --- Fungsi normalize harus berada di luar payload ---
-def normalize_job_items(value):
-    if isinstance(value, list):
-        return ", ".join(str(v) for v in value)
-    return str(value or "")
-
-# Gabungkan job_items semua pakar
-all_job_items = ", ".join(
-    normalize_job_items(m.get("job_items", ""))
-    for m in expert_meta
-)
-
-# --- Payload akhir ---
-payload = {
-    "username": "GABUNGAN PAKAR",
-    "timestamp": datetime.now().isoformat(),
-    "result": {
-        "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
-        "global": df_global.to_dict(orient="records")
-    },
-    "job_items": all_job_items
-}
-# --- Fungsi normalize harus berada di luar payload ---
-def normalize_job_items(value):
-    if isinstance(value, list):
-        return ", ".join(str(v) for v in value)
-    return str(value or "")
-
-# Gabungkan job_items semua pakar
-all_job_items = ", ".join(
-    normalize_job_items(m.get("job_items", ""))
-    for m in expert_meta
-)
-
-# --- Payload akhir ---
-payload = {
-    "username": "GABUNGAN PAKAR",
-    "timestamp": datetime.now().isoformat(),
-    "result": {
-        "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
-        "global": df_global.to_dict(orient="records")
-    },
-    "job_items": all_job_items
-}
-
 
 # PDF libs (optional)
 try:
@@ -106,7 +60,7 @@ def to_excel_bytes(df_dict):
     return output
 
 # ------------------------------
-# Config / Data (unchanged)
+# Config / Data
 # ------------------------------
 CRITERIA = [
     "A. Penataan Area Drop-off, Pick-up, dan Manajemen Moda",
@@ -188,6 +142,7 @@ def hash_password(password, salt=None):
     dk = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 200000)
     return salt.hex(), dk.hex()
 
+
 def verify_password(password, salt_hex, hash_hex):
     salt = bytes.fromhex(salt_hex)
     dk = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 200000)
@@ -196,6 +151,7 @@ def verify_password(password, salt_hex, hash_hex):
 # ------------------------------
 # AHP core functions
 # ------------------------------
+
 def build_matrix_from_pairs(items, pair_values):
     n = len(items)
     M = np.ones((n, n), dtype=float)
@@ -205,15 +161,18 @@ def build_matrix_from_pairs(items, pair_values):
             continue
         i = idx[a]; j = idx[b]
         M[i, j] = float(val)
-        if val != 0:
+        if float(val) != 0:
             M[j, i] = 1.0 / float(val)
     return M
 
+
 def geometric_mean_weights(mat):
     n = mat.shape[0]
+    # handle potential zeros or negative values defensively
     gm = np.prod(mat, axis=1) ** (1.0 / n)
     w = gm / gm.sum()
     return w
+
 
 def consistency_metrics(mat, weights):
     n = mat.shape[0]
@@ -227,6 +186,7 @@ def consistency_metrics(mat, weights):
 # ------------------------------
 # PDF generation (reportlab)
 # ------------------------------
+
 def generate_pdf_bytes(submission_row):
     if canvas is None:
         raise RuntimeError("reportlab not installed. Install with `pip install reportlab` to enable PDF export.")
@@ -270,7 +230,10 @@ def generate_pdf_bytes(submission_row):
         if y < margin + 30 * mm:
             c.showPage()
             y = height - margin
-        c.drawString(x + 2 * mm, y, f"{k} — {w:.4f}")
+        try:
+            c.drawString(x + 2 * mm, y, f"{k} — {w:.4f}")
+        except Exception:
+            c.drawString(x + 2 * mm, y, f"{k} — {w}")
         y -= 5 * mm
 
     y -= 4 * mm
@@ -316,6 +279,7 @@ def generate_pdf_bytes(submission_row):
 # ------------------------------
 # Supabase-backed DB operations (with job_items)
 # ------------------------------
+
 def register_user(username, password, is_admin=False, job_items=""):
     if not username or not password:
         return False, "Username dan password wajib diisi."
@@ -335,11 +299,11 @@ def register_user(username, password, is_admin=False, job_items=""):
     try:
         res = supabase.table("users").insert(payload).execute()
         if hasattr(res, "error") and res.error:
-            # res.error may be object in some versions
             return False, f"Registrasi gagal: {getattr(res.error, 'message', str(res.error))}"
         return True, "Registrasi berhasil. Silakan login."
     except Exception as e:
         return False, f"Registrasi gagal: {e}"
+
 
 def authenticate_user(username, password):
     res = supabase.table("users").select("*").eq("username", username).execute()
@@ -359,6 +323,7 @@ def authenticate_user(username, password):
     except Exception as e:
         return False, f"Auth error: {e}"
 
+
 def save_submission(user_id, main_pairs, sub_pairs, result):
     payload = {
         "user_id": user_id,
@@ -370,13 +335,16 @@ def save_submission(user_id, main_pairs, sub_pairs, result):
     res = supabase.table("submissions").insert(payload).execute()
     return getattr(res, "data", res)
 
+
 def get_user_submissions(user_id):
     res = supabase.table("submissions").select("*").eq("user_id", user_id).order("id", desc=True).execute()
     return getattr(res, "data", []) or []
 
+
 def delete_submission(submission_id):
     res = supabase.table("submissions").delete().eq("id", submission_id).execute()
     return getattr(res, "data", []) or []
+
 
 def get_all_submissions_with_user():
     users_res = supabase.table("users").select("*").order("username", desc=False).execute()
@@ -397,10 +365,12 @@ def get_all_submissions_with_user():
     all_rows = sorted(all_rows, key=lambda x: x["id"], reverse=True)
     return all_rows
 
+
 def get_latest_submission_by_user(user_id):
     res = supabase.table("submissions").select("*").eq("user_id", user_id).order("id", desc=True).limit(1).execute()
     data = getattr(res, "data", []) or []
     return data[0] if data else None
+
 
 def get_latest_submissions_per_user_list():
     users_res = supabase.table("users").select("*").order("username", desc=False).execute()
@@ -478,9 +448,11 @@ else:
         "Hasil Akhir Penilaian"
     ])
 
+
 def _short_key(prefix, a, b):
     h = hashlib.sha1((prefix + "::" + a + "|||" + b).encode("utf-8")).hexdigest()
     return h[:12]
+
 
 def pairwise_inputs(items, key_prefix):
     pairs = list(itertools.combinations(items, 2))
@@ -796,7 +768,77 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
     global_rows = []
     for group in CRITERIA:
         collects = []
+        for username, rjson, _, _ in experts:
+            try:
+                res = rjson if isinstance(rjson, dict) else json.loads(rjson)
+            except Exception:
+                res = {}
+            lw = res.get("local", {}).get(group, {}).get("weights", [])
+            if lw:
+                collects.append(np.array(lw))
+        if not collects:
+            continue
+        collects = np.vstack(collects)
+        gm_loc = np.exp(np.mean(np.log(collects), axis=0))
+        gm_loc = gm_loc / gm_loc.sum()
+        local_combined[group] = gm_loc
+        main_idx = CRITERIA.index(group)
+        for sk, lw in zip(SUBCRITERIA[group], gm_loc):
+            gw = lw * weights_aij[main_idx]
+            global_rows.append({
+                "Kriteria": group,
+                "SubKriteria": sk,
+                "LocalWeight": float(lw),
+                "MainWeight": float(weights_aij[main_idx]),
+                "GlobalWeight": float(gw)
+            })
+
+    df_global = pd.DataFrame(global_rows).sort_values("GlobalWeight", ascending=False)
+    st.subheader("3) Bobot Global Gabungan Sub-Kriteria")
+    st.table(df_global)
+
+    try:
+        import altair as alt
+        chart = alt.Chart(df_global.head(20)).mark_bar().encode(
+            x='GlobalWeight:Q',
+            y=alt.Y('SubKriteria:N', sort='-x')
+        ).properties(height=500)
+        st.altair_chart(chart, use_container_width=True)
+    except Exception:
+        st.info("Altair tidak tersedia, grafik dilewati.")
+
+    # include expert_meta in excel
+    excel_bio = to_excel_bytes({
+        "AIJ_Kriteria": df_aij,
+        "AIP_Kriteria": df_aip,
+        "Global_Combined": df_global,
+        "Experts": pd.DataFrame(expert_meta)
+    })
+    st.download_button("📥 Download Excel Gabungan", data=excel_bio,
+                       file_name="AHP_Gabungan_Pakar.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    # normalize job_items
+    def normalize_job_items(value):
+        if isinstance(value, list):
+            return ", ".join([str(v) for v in value])
+        return str(value or "")
+
+    all_job_items = ", ".join(
+        normalize_job_items(m.get("job_items", ""))
+        for m in expert_meta
+    )
+
+    payload = {
+        "username": "GABUNGAN PAKAR",
+        "timestamp": datetime.now().isoformat(),
+        "result": {
+            "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
+            "global": df_global.to_dict(orient="records")
+        },
+        "job_items": all_job_items
     }
+
     try:
         pdf_bio = generate_pdf_bytes(payload)
         st.download_button("📄 Download PDF Gabungan", data=pdf_bio,
