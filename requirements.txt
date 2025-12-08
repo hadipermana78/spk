@@ -1,0 +1,14 @@
+streamlit==1.37.1
+pandas==2.2.2
+numpy==1.26.4
+openpyxl==3.1.2
+reportlab==3.6.12
+supabase==2.3.3
+postgrest==0.10.6
+gotrue==2.5.3
+storage3==0.6.0
+realtime==1.0.3
+requests==2.32.2
+python-dotenv==1.0.1
+altair==5.3.0
+typing_extensions==4.11.0
