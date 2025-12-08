@@ -35,6 +35,23 @@ SUPABASE_URL = st.secrets["https://eokdvkmsixasrozhcknq.supabase.co"]
 SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVva2R2a21zaXhhc3Jvemhja25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNzIyNjEsImV4cCI6MjA4MDc0ODI2MX0.MyOe1JJNf0_byEDDdV_4FEmoNhbm4po4jra5H7jyJss"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+import traceback
+import streamlit as st
+import sys
+from io import StringIO
+
+# ==== INTERNAL LOG VIEWER ====
+log_buffer = StringIO()
+sys.stdout = log_buffer
+sys.stderr = log_buffer
+
+def show_internal_logs():
+    st.subheader("🧪 INTERNAL DEBUG LOGS (Auto)")
+    logs = log_buffer.getvalue()
+    if logs.strip() == "":
+        st.info("Tidak ada error atau log output.")
+    else:
+        st.code(logs, language="text")
 
 # Supabase client
 try:
@@ -877,3 +894,4 @@ elif page == "Laporan Final Gabungan Pakar":
 
 # END OF PART 3
 # ------------------------------
+
