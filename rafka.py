@@ -484,7 +484,7 @@ if page == "Isi Kuesioner":
         # Save to supabase
         save_submission(user['id'], main_pairs_store, sub_pairs, result)
         st.success("Hasil berhasil disimpan ke database (Supabase).")
-        st.experimental_rerun()
+       st.rerun()
 
 # Page: My Submissions
 elif page == "My Submissions":
@@ -626,7 +626,7 @@ elif page == "Admin Panel" and user["is_admin"]:
         try:
             delete_submission(int(del_id))
             st.success(f"Submission #{del_id} telah dihapus.")
-            st.experimental_rerun()
+            st.rerun()
         except Exception as e:
             st.error(f"Gagal menghapus: {e}")
 
@@ -767,3 +767,4 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # End of file
+
