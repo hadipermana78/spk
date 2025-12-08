@@ -484,7 +484,7 @@ if page == "Isi Kuesioner":
         # Save to supabase
         save_submission(user['id'], main_pairs_store, sub_pairs, result)
         st.success("Hasil berhasil disimpan ke database (Supabase).")
-       st.rerun()
+        st.rerun()
 
 # Page: My Submissions
 elif page == "My Submissions":
@@ -767,4 +767,5 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # End of file
+
 
