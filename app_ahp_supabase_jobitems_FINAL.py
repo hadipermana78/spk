@@ -13,6 +13,13 @@ import hashlib
 import os
 
 from supabase import create_client
+# Normalisasi job_items agar pasti string
+def normalize_job_items(value):
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return ", ".join([str(v) for v in value])
+    return str(value)
 
 # PDF libs (optional)
 try:
