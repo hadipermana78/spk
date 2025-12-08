@@ -19,7 +19,7 @@ Usage:
 # ------------------------------
 # Imports
 # ------------------------------
-import streamlit as st
+
 import json
 import itertools
 import numpy as np
@@ -28,6 +28,13 @@ from io import BytesIO
 from datetime import datetime
 import hashlib
 import os
+import streamlit as st
+from supabase import create_client
+
+SUPABASE_URL = st.secrets["https://eokdvkmsixasrozhcknq.supabase.co"]
+SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVva2R2a21zaXhhc3Jvemhja25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNzIyNjEsImV4cCI6MjA4MDc0ODI2MX0.MyOe1JJNf0_byEDDdV_4FEmoNhbm4po4jra5H7jyJss"]
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Supabase client
 try:
