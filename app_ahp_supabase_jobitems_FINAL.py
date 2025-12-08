@@ -1,6 +1,6 @@
-# app_ahp_supabase_jobitems_FINAL.py
-# Streamlit AHP Multi-User — Supabase-backed version with job_items
-# Requirements: streamlit, supabase, numpy, pandas, openpyxl, reportlab, altair, httpx<0.26
+# app_ahp_supabase.py
+# Streamlit AHP Multi-User — Supabase-backed version with job_items (final)
+# Requirements: streamlit==1.38.0, supabase==2.3.3, httpx==0.25.2, numpy, pandas, openpyxl, reportlab, altair
 
 import streamlit as st
 import json
@@ -12,7 +12,6 @@ from datetime import datetime
 import hashlib
 import os
 
-# Supabase client
 from supabase import create_client
 
 # PDF libs (optional)
@@ -29,14 +28,15 @@ from openpyxl import Workbook
 
 st.set_page_config(page_title="AHP Multi-User (Supabase)", layout="wide")
 
-# -- Check secrets
+# -------------------------
+# Supabase setup & check
+# -------------------------
 if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
-    st.warning("Supabase secrets belum dikonfigurasi. Tambahkan SUPABASE_URL dan SUPABASE_KEY di Streamlit Secrets.")
+    st.warning("Supabase secrets belum dikonfigurasi. Tambahkan SUPABASE_URL dan SUPABASE_KEY (service_role) di Streamlit Secrets.")
     st.stop()
 
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ------------------------------
@@ -44,6 +44,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ------------------------------
 def to_excel_bytes(df_dict):
     wb = Workbook()
+    # remove default sheet
     default = wb.active
     wb.remove(default)
     for sheet_name, df in df_dict.items():
@@ -194,19 +195,21 @@ def generate_pdf_bytes(submission_row):
     c.drawString(x, y, "Laporan Hasil AHP — Penataan Ruang Publik")
     y -= 8 * mm
     c.setFont("Helvetica", 9)
-    c.drawString(x, y, f"User / Group: {submission_row.get('username','')}")
-    y -= 5 * mm
-    # job items
+
+    # username + job_items + timestamp
+    username = submission_row.get("username", "")
     job_items = submission_row.get("job_items", "")
     if isinstance(job_items, list):
         job_items = ", ".join(job_items)
+    c.drawString(x, y, f"User / Group: {username}")
+    y -= 5 * mm
     if job_items:
         c.drawString(x, y, f"Job Items: {job_items}")
         y -= 6 * mm
     c.drawString(x, y, f"Waktu: {submission_row.get('timestamp','')}")
     y -= 8 * mm
 
-    res = submission_row.get("result", {})
+    res = submission_row.get("result", {}) or {}
 
     main = res.get("main", {})
     keys = main.get("keys", [])
@@ -276,18 +279,18 @@ def register_user(username, password, is_admin=False, job_items=""):
         ji = ", ".join(job_items)
     else:
         ji = str(job_items or "").strip()
+    payload = {
+        "username": username,
+        "pw_salt": salt,
+        "pw_hash": pw_hash,
+        "is_admin": is_admin,
+        "job_items": ji
+    }
     try:
-        payload = {
-            "username": username,
-            "pw_salt": salt,
-            "pw_hash": pw_hash,
-            "is_admin": is_admin,
-            "job_items": ji
-        }
         res = supabase.table("users").insert(payload).execute()
-        # check for errors
         if hasattr(res, "error") and res.error:
-            return False, f"Registrasi gagal: {res.error.message}"
+            # res.error may be object in some versions
+            return False, f"Registrasi gagal: {getattr(res.error, 'message', str(res.error))}"
         return True, "Registrasi berhasil. Silakan login."
     except Exception as e:
         return False, f"Registrasi gagal: {e}"
@@ -330,7 +333,6 @@ def delete_submission(submission_id):
     return getattr(res, "data", []) or []
 
 def get_all_submissions_with_user():
-    # Fetch all users and for each user's latest submission.
     users_res = supabase.table("users").select("*").order("username", desc=False).execute()
     users = getattr(users_res, "data", []) or []
     all_rows = []
@@ -365,16 +367,14 @@ def get_latest_submissions_per_user_list():
     return experts
 
 # ------------------------------
-# UI & Routing (similar to original)
+# UI & Routing
 # ------------------------------
-# Ensure session state
 if 'user' not in st.session_state:
     st.session_state['user'] = None
 
 st.sidebar.title("Akses Aplikasi")
 auth_mode = st.sidebar.selectbox("Mode", ["Login", "Register", "Logout"])
 
-# Auth widgets
 if auth_mode == "Register":
     st.sidebar.subheader("Daftar Pengguna Baru")
     new_user = st.sidebar.text_input("Username (daftar)", key="reg_user")
@@ -496,7 +496,6 @@ if page == "Isi Kuesioner":
         }
         ts = datetime.now().isoformat()
         main_pairs_store = {f"{a} ||| {b}": v for (a, b), v in main_pairs.items()}
-        # Save to supabase
         save_submission(user['id'], main_pairs_store, sub_pairs, result)
         st.success("Hasil berhasil disimpan ke database (Supabase).")
         st.rerun()
@@ -512,14 +511,12 @@ elif page == "My Submissions":
             sid = r.get("id")
             ts = r.get("timestamp")
             res = r.get("result_json") if r.get("result_json") is not None else r.get("result")
-            # If res is a json string, parse
             if isinstance(res, str):
                 try:
                     res = json.loads(res)
                 except Exception:
                     res = {}
             st.subheader(f"Submission #{sid} — {ts}")
-            # show job items
             if user.get("job_items"):
                 st.write("**Job Items / Keahlian:** " + str(user.get("job_items","")))
             dfg = pd.DataFrame(res.get('global', [])).sort_values("GlobalWeight", ascending=False).head(10)
@@ -543,7 +540,13 @@ elif page == "My Submissions":
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    key=f"ex_{sid}")
             with col2:
-                submission_row = {"id": sid, "username": user['username'], "timestamp": ts, "result": res, "job_items": user.get("job_items","")}
+                submission_row = {
+                    "id": sid,
+                    "username": user["username"],
+                    "timestamp": ts,
+                    "result": res,
+                    "job_items": user.get("job_items", "")
+                }
                 try:
                     pdf_bio = generate_pdf_bytes(submission_row)
                     st.download_button(f"Download PDF #{sid}", data=pdf_bio,
@@ -566,10 +569,9 @@ elif page == "Hasil Akhir Penilaian":
             res = json.loads(res)
         except Exception:
             res = {}
-    st.subheader("1. Bobot Kriteria Utama")
-    # show job items
     if user.get("job_items"):
         st.write("**Job Items / Keahlian:** " + str(user.get("job_items","")))
+    st.subheader("1. Bobot Kriteria Utama")
     df_main = pd.DataFrame({"Kriteria": res['main']['keys'], "Bobot": res['main']['weights']})
     st.table(df_main)
     st.write("**CI = {:.4f}, CR = {:.4f}**".format(res['main']['cons'].get('CI', 0), res['main']['cons'].get('CR', 0)))
@@ -599,7 +601,13 @@ elif page == "Hasil Akhir Penilaian":
 
     st.markdown("---")
     st.subheader("4. Download Laporan")
-    submission_row = {"id": sid, "username": user['username'], "timestamp": ts, "result": res, "job_items": user.get("job_items","")}
+    submission_row = {
+        "id": sid,
+        "username": user["username"],
+        "timestamp": ts,
+        "result": res,
+        "job_items": user.get("job_items", "")
+    }
     try:
         pdf_bio = generate_pdf_bytes(submission_row)
         st.download_button("📄 Download Laporan PDF", data=pdf_bio,
@@ -616,7 +624,7 @@ elif page == "Hasil Akhir Penilaian":
                        file_name=f"hasil_ahp_{sid}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# Admin Panel (admin-only)
+# Admin Panel
 elif page == "Admin Panel" and user["is_admin"]:
     st.header("📊 Admin Panel – Manajemen Submission Pakar")
     all_rows = get_all_submissions_with_user()
@@ -629,8 +637,8 @@ elif page == "Admin Panel" and user["is_admin"]:
         sid = r.get("id")
         username = r.get("username")
         ts = r.get("timestamp")
+        job_items = r.get("job_items", "")
         res = r.get("result_json") if r.get("result_json") is not None else r.get("result")
-        job_items = r.get("job_items","")
         if isinstance(res, str):
             try:
                 res = json.loads(res)
@@ -666,7 +674,7 @@ elif page == "Admin Panel" and user["is_admin"]:
     for r in all_rows:
         sid = r.get("id")
         res = r.get("result_json") if r.get("result_json") is not None else r.get("result")
-        job_items = r.get("job_items","")
+        job_items = r.get("job_items", "")
         if isinstance(res, str):
             try:
                 res = json.loads(res)
@@ -698,7 +706,6 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
     all_main_matrices = []
     expert_meta = []
     for username, rjson, main_pairs_json, job_items in experts:
-        # store meta for report
         expert_meta.append({"username": username, "job_items": job_items})
         mp = {}
         try:
@@ -725,7 +732,7 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
 
     # 2) AIP — aggregate individual priorities
     all_w = []
-    for username, rjson, _ , _ in experts:
+    for username, rjson, _, _ in experts:
         try:
             res = rjson if isinstance(rjson, dict) else json.loads(rjson)
         except Exception:
@@ -743,7 +750,7 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
     global_rows = []
     for group in CRITERIA:
         collects = []
-        for username, rjson, _ , _ in experts:
+        for username, rjson, _, _ in experts:
             try:
                 res = rjson if isinstance(rjson, dict) else json.loads(rjson)
             except Exception:
@@ -804,4 +811,4 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
     except RuntimeError as e:
         st.warning(str(e))
 
-# End of file
+# EOF
