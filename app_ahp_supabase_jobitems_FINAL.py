@@ -14,12 +14,51 @@ import os
 
 from supabase import create_client
 # Normalisasi job_items agar pasti string
+# --- Fungsi normalize harus berada di luar payload ---
 def normalize_job_items(value):
-    if value is None:
-        return ""
     if isinstance(value, list):
-        return ", ".join([str(v) for v in value])
-    return str(value)
+        return ", ".join(str(v) for v in value)
+    return str(value or "")
+
+# Gabungkan job_items semua pakar
+all_job_items = ", ".join(
+    normalize_job_items(m.get("job_items", ""))
+    for m in expert_meta
+)
+
+# --- Payload akhir ---
+payload = {
+    "username": "GABUNGAN PAKAR",
+    "timestamp": datetime.now().isoformat(),
+    "result": {
+        "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
+        "global": df_global.to_dict(orient="records")
+    },
+    "job_items": all_job_items
+}
+# --- Fungsi normalize harus berada di luar payload ---
+def normalize_job_items(value):
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    return str(value or "")
+
+# Gabungkan job_items semua pakar
+all_job_items = ", ".join(
+    normalize_job_items(m.get("job_items", ""))
+    for m in expert_meta
+)
+
+# --- Payload akhir ---
+payload = {
+    "username": "GABUNGAN PAKAR",
+    "timestamp": datetime.now().isoformat(),
+    "result": {
+        "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
+        "global": df_global.to_dict(orient="records")
+    },
+    "job_items": all_job_items
+}
+
 
 # PDF libs (optional)
 try:
@@ -757,78 +796,7 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
     global_rows = []
     for group in CRITERIA:
         collects = []
-        for username, rjson, _, _ in experts:
-            try:
-                res = rjson if isinstance(rjson, dict) else json.loads(rjson)
-            except Exception:
-                res = {}
-            lw = res.get("local", {}).get(group, {}).get("weights", [])
-            collects.append(np.array(lw))
-        collects = np.vstack(collects)
-        gm_loc = np.exp(np.mean(np.log(collects), axis=0))
-        gm_loc = gm_loc / gm_loc.sum()
-        local_combined[group] = gm_loc
-        main_idx = CRITERIA.index(group)
-        for sk, lw in zip(SUBCRITERIA[group], gm_loc):
-            gw = lw * weights_aij[main_idx]
-            global_rows.append({
-                "Kriteria": group,
-                "SubKriteria": sk,
-                "LocalWeight": float(lw),
-                "MainWeight": float(weights_aij[main_idx]),
-                "GlobalWeight": float(gw)
-            })
-    df_global = pd.DataFrame(global_rows).sort_values("GlobalWeight", ascending=False)
-    st.subheader("3) Bobot Global Gabungan Sub-Kriteria")
-    st.table(df_global)
-    try:
-        import altair as alt
-        chart = alt.Chart(df_global.head(20)).mark_bar().encode(
-            x='GlobalWeight:Q',
-            y=alt.Y('SubKriteria:N', sort='-x')
-        ).properties(height=500)
-        st.altair_chart(chart, use_container_width=True)
-    except Exception:
-        st.info("Altair tidak tersedia, grafik dilewati.")
-
-    # include expert_meta in excel
-    excel_bio = to_excel_bytes({
-        "AIJ_Kriteria": pd.DataFrame({"Kriteria": CRITERIA, "Bobot_AI J": weights_aij}),
-        "AIP_Kriteria": pd.DataFrame({"Kriteria": CRITERIA, "Bobot_AIP": w_aip}),
-        "Global_Combined": df_global,
-        "Experts": pd.DataFrame(expert_meta)
-    })
-    st.download_button("📥 Download Excel Gabungan", data=excel_bio,
-                       file_name="AHP_Gabungan_Pakar.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    payload = {
-        "username": "GABUNGAN PAKAR",
-        "timestamp": datetime.now().isoformat(),
-        "result": {
-            "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
-            "global": df_global.to_dict(orient="records")
-        },
-       def normalize_job_items(value):
-    if isinstance(value, list):
-        return ", ".join([str(v) for v in value])
-    return str(value or "")
-
-"job_items": ", ".join(
-    normalize_job_items(m.get("job_items", ""))
-    for m in expert_meta
-)
-
-
-payload = {
-    "username": "GABUNGAN PAKAR",
-    "timestamp": datetime.now().isoformat(),
-    "result": {
-        "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
-        "global": df_global.to_dict(orient="records")
-    },
-    "job_items": all_job_items
-}
+       c
 
     }
     try:
