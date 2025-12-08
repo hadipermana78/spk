@@ -543,7 +543,7 @@ elif page == "My Submissions":
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    key=f"ex_{sid}")
             with col2:
-                submission_row = {"id": sid, "username": user['username'], "timestamp': ts, "result": res, "job_items": user.get("job_items","")}
+                submission_row = {"id": sid, "username": user['username'], "timestamp": ts, "result": res, "job_items": user.get("job_items","")}
                 try:
                     pdf_bio = generate_pdf_bytes(submission_row)
                     st.download_button(f"Download PDF #{sid}", data=pdf_bio,
