@@ -802,7 +802,23 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
             "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
             "global": df_global.to_dict(orient="records")
         },
-        "job_items": ", ".join([m.get("job_items","") for m in expert_meta])
+       def normalize_job_items(value):
+    if isinstance(value, list):
+        return ", ".join([str(v) for v in value])
+    return str(value or "")
+
+all_job_items = ", ".join([normalize_job_items(m.get("job_items", "")) for m in expert_meta])
+
+payload = {
+    "username": "GABUNGAN PAKAR",
+    "timestamp": datetime.now().isoformat(),
+    "result": {
+        "main": {"keys": CRITERIA, "weights": list(map(float, weights_aij)), "cons": cons_aij},
+        "global": df_global.to_dict(orient="records")
+    },
+    "job_items": all_job_items
+}
+
     }
     try:
         pdf_bio = generate_pdf_bytes(payload)
