@@ -27,15 +27,15 @@ except Exception:
 
 from openpyxl import Workbook
 
-st.set_page_config(page_title="AHP Multi-User (Supabase)", layout="wide")
+st.set_page_config(page_title="AHP Multi-User ()", layout="wide")
 
 # -- Check secrets
-if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
-    st.warning("Supabase secrets belum dikonfigurasi. Tambahkan SUPABASE_URL dan SUPABASE_KEY di Streamlit Secrets.")
+if "_URL" not in st.secrets or "_KEY" not in st.secrets:
+    st.warning(" secrets belum dikonfigurasi. Tambahkan _URL dan _KEY di Streamlit Secrets.")
     st.stop()
 
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+_URL = st.secrets["_URL"]
+_KEY = st.secrets["_KEY"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -393,7 +393,7 @@ else:  # Logout
         st.sidebar.info("Anda telah logout.")
 
 if not st.session_state['user']:
-    st.title("Aplikasi Kuesioner AHP — Multi-user (Supabase)")
+    st.title("Aplikasi Kuesioner AHP — Multi-user")
     st.write("Silakan login atau daftar melalui panel kiri (sidebar).")
     st.write("Setelah login, Anda dapat mengisi kuesioner AHP atau melihat hasil.")
     st.stop()
@@ -767,5 +767,6 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # End of file
+
 
 
