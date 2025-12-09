@@ -931,5 +931,158 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
                            file_name="AHP_Gabungan_Pakar.pdf", mime="application/pdf")
     except RuntimeError as e:
         st.warning(str(e))
+                    "GlobalWeight": float(lw * main_w[i])
+                })
+
+        result = {
+            "main": {
+                "keys": CRITERIA,
+                "weights": list(map(float, main_w)),
+                "cons": main_cons
+            },
+            "local": local,
+            "global": global_rows
+        }
+
+        save_submission(user['id'], main_pairs, sub_pairs, result)
+        st.success("Hasil berhasil disimpan ke database!")
+
+
+# --------------------------------------------
+# Page: My Submissions
+# --------------------------------------------
+elif page == "My Submissions":
+    st.header("Riwayat Pengisian Saya")
+
+    subs = get_user_submissions(user['id'])
+    if not subs:
+        st.info("Belum ada data tersimpan.")
+    else:
+        for s in subs:
+            with st.expander(f"ID {s['id']} — {s['timestamp']}"):
+                st.json(s["result_json"])
+
+                if canvas:
+                    if st.button(f"Download PDF untuk ID {s['id']}", key=f"pdf_{s['id']}"):
+                        pdf_bytes = generate_pdf_bytes({
+                            "username": user["username"],
+                            "timestamp": s["timestamp"],
+                            "result": s["result_json"],
+                            "job_items": user.get("job_items", "")
+                        })
+                        st.download_button(
+                            label="Download PDF",
+                            data=pdf_bytes,
+                            file_name=f"ahp_report_{s['id']}.pdf",
+                            mime="application/pdf"
+                        )
+
+                if st.button(f"Hapus ID {s['id']}", key=f"del_{s['id']}"):
+                    delete_submission(s['id'])
+                    st.warning("Data dihapus.")
+                    st.experimental_rerun()
+
+
+# --------------------------------------------
+# Page: Hasil Akhir Penilaian (per user)
+# --------------------------------------------
+elif page == "Hasil Akhir Penilaian":
+    st.header("Hasil Akhir Penilaian — Pengguna Ini")
+
+    latest = get_latest_submission_by_user(user['id'])
+    if not latest:
+        st.info("Belum ada penilaian yang disimpan.")
+    else:
+        res = latest["result_json"]
+        main_w = res["main"]["weights"]
+        main_keys = res["main"]["keys"]
+        main_cons = res["main"]["cons"]
+
+        st.subheader("Bobot Kriteria Utama")
+        df_main = pd.DataFrame({"Kriteria": main_keys, "Weight": main_w})
+        st.dataframe(df_main)
+
+        st.subheader("Konsistensi Kriteria Utama (CI / CR)")
+        st.write(main_cons)
+
+        df_global = pd.DataFrame(res["global"])
+        df_global = df_global.sort_values("GlobalWeight", ascending=False)
+
+        st.subheader("Bobot Global Sub-Kriteria (Top Rank)")
+        st.dataframe(df_global)
+
+        st.subheader("Unduh Excel")
+        excel_bytes = to_excel_bytes({
+            "MainWeights": df_main,
+            "GlobalWeights": df_global
+        })
+        st.download_button("Download Excel", data=excel_bytes,
+                           file_name="AHPMultiUser.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# --------------------------------------------
+# Page: Admin Panel — Semua User
+# --------------------------------------------
+elif page == "Admin Panel" and user["is_admin"]:
+    st.header("Admin Panel — Semua User")
+
+    rows = get_all_submissions_with_user()
+    if not rows:
+        st.info("Belum ada submission dari user.")
+    else:
+        for r in rows:
+            with st.expander(f"{r['username']} — {r['timestamp']}"):
+                st.write(f"Job Items: {r.get('job_items','')}")
+                st.json(r["result_json"])
+
+# --------------------------------------------
+# Page: Laporan Final Gabungan Pakar
+# --------------------------------------------
+elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
+    st.header("Laporan Final Gabungan Pakar")
+
+    experts = get_latest_submissions_per_user_list()
+    if not experts:
+        st.info("Belum ada data pakar.")
+    else:
+        # tampilkan daftar pakar
+        for (uname, res, _, ji) in experts:
+            st.markdown(f"**{uname}** — {ji}")
+
+        # hitung agregasi geometric mean
+        st.subheader("Gabungan Bobot (Geometric Mean)")
+
+        main_arrays = []
+        global_dfs = []
+        for (_uname, res, _main_pairs, ji) in experts:
+            main_arrays.append(np.array(res["main"]["weights"]))
+            global_dfs.append(pd.DataFrame(res["global"]))
+
+        # geometric mean
+        gm_main = np.prod(main_arrays, axis=0) ** (1 / len(main_arrays))
+        gm_main = gm_main / gm_main.sum()
+
+        st.write("Bobot Kriteria Utama (GM):")
+        df_gm_main = pd.DataFrame({"Kriteria": CRITERIA, "Weight": gm_main})
+        st.dataframe(df_gm_main)
+
+        # global aggregation
+        merged = pd.concat(global_dfs)
+        df_global = merged.groupby(["Kriteria", "SubKriteria"]).agg({
+            "GlobalWeight": "mean"
+        }).reset_index()
+        df_global = df_global.sort_values("GlobalWeight", ascending=False)
+
+        st.write("Bobot Global Sub-Kriteria (Rata-rata Pakar):")
+        st.dataframe(df_global)
+
+        st.download_button(
+            "Download Excel Laporan Gabungan",
+            data=to_excel_bytes({"Main": df_gm_main, "Global": df_global}),
+            file_name="AHP_GabunganPakar.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # EOF
+
