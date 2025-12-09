@@ -388,7 +388,7 @@ def get_latest_submissions_per_user_list():
 if 'user' not in st.session_state:
     st.session_state['user'] = None
 
-st.sidebar.title("Akses Aplikasi")
+st.sidebar.title("Akses ")
 auth_mode = st.sidebar.selectbox("Mode", ["Login", "Register", "Logout"])
 
 if auth_mode == "Register":
@@ -422,7 +422,7 @@ else:  # Logout
         st.sidebar.info("Anda telah logout.")
 
 if not st.session_state['user']:
-    st.title("Aplikasi Kuesioner AHP — Multi-user (Supabase)")
+    st.title("Aplikasi Kuesioner AHP — Multi-user")
     st.write("Silakan login atau daftar melalui panel kiri (sidebar).")
     st.write("Setelah login, Anda dapat mengisi kuesioner AHP atau melihat hasil.")
     st.stop()
