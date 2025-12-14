@@ -188,94 +188,231 @@ def consistency_metrics(mat, weights):
 # PDF generation (reportlab)
 # ------------------------------
 
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.enums import TA_LEFT
+from reportlab.lib import colors
+
 def generate_pdf_bytes(submission_row):
     if canvas is None:
-        raise RuntimeError("reportlab not installed. Install with `pip install reportlab` to enable PDF export.")
-    bio = BytesIO()
-    c = canvas.Canvas(bio, pagesize=A4)
-    width, height = A4
-    margin = 18 * mm
-    x = margin
-    y = height - margin
+        raise RuntimeError("reportlab belum terpasang")
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(x, y, "Laporan Hasil AHP — Penataan Ruang Publik")
-    y -= 8 * mm
-    c.setFont("Helvetica", 9)
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
 
-    # username + job_items + timestamp
-    username = submission_row.get("username", "")
-    job_items = submission_row.get("job_items", "")
-    if isinstance(job_items, list):
-        job_items = ", ".join(job_items)
-    c.drawString(x, y, f"User / Group: {username}")
-    y -= 5 * mm
-    if job_items:
-        c.drawString(x, y, f"Job Items: {job_items}")
-        y -= 6 * mm
-    c.drawString(x, y, f"Waktu: {submission_row.get('timestamp','')}")
-    y -= 8 * mm
+    styles = getSampleStyleSheet()
+    styles["Normal"].fontSize = 9
+    styles["Heading1"].fontSize = 14
+    styles["Heading2"].fontSize = 11
+
+    elements = []
+
+    # =========================
+    # HEADER
+    # =========================
+    elements.append(Paragraph(
+        "<b>Laporan Hasil AHP — Penataan Ruang Publik</b>",
+        styles["Heading1"]
+    ))
+    elements.append(Spacer(1, 10))
+
+    meta = f"""
+    <b>User:</b> {submission_row.get('username','')}<br/>
+    <b>Job Items:</b> {submission_row.get('job_items','')}<br/>
+    <b>Waktu:</b> {submission_row.get('timestamp','')}
+    """
+    elements.append(Paragraph(meta, styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
     res = submission_row.get("result", {}) or {}
 
-    main = res.get("main", {})
-    keys = main.get("keys", [])
-    weights = main.get("weights", [])
-    cons = main.get("cons", {})
+    # =========================
+    # KRITERIA UTAMA
+    # =========================
+    elements.append(Paragraph("<b>Bobot Kriteria Utama</b>", styles["Heading2"]))
+    table_data = [["Kriteria", "Bobot"]]
+    for k, w in zip(res["main"]["keys"], res["main"]["weights"]):
+        table_data.append([k, f"{w:.4f}"])
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "Bobot Kriteria Utama:")
-    y -= 6 * mm
-    c.setFont("Helvetica", 9)
-    for k, w in zip(keys, weights):
-        if y < margin + 30 * mm:
-            c.showPage()
-            y = height - margin
-        try:
-            c.drawString(x + 2 * mm, y, f"{k} — {w:.4f}")
-        except Exception:
-            c.drawString(x + 2 * mm, y, f"{k} — {w}")
-        y -= 5 * mm
+    table = Table(table_data, colWidths=[350, 80])
+    table.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 10))
 
-    y -= 4 * mm
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "Bobot Global (Top):")
-    y -= 6 * mm
-    c.setFont("Helvetica", 9)
+    cons = res["main"]["cons"]
+    elements.append(Paragraph(
+        f"CI = {cons.get('CI',0):.4f} | CR = {cons.get('CR',0):.4f}",
+        styles["Normal"]
+    ))
+    elements.append(Spacer(1, 14))
 
-    gw = pd.DataFrame(res.get("global", []))
-    if not gw.empty:
-        gw_sorted = gw.sort_values("GlobalWeight", ascending=False).head(20)
-        for _, row in gw_sorted.iterrows():
-            if y < margin + 20 * mm:
-                c.showPage()
-                y = height - margin
-            text = f"{row.get('SubKriteria','')} ({row.get('Kriteria','')}) — {row.get('GlobalWeight',0):.6f}"
-            c.drawString(x + 2 * mm, y, text if len(text) < 120 else text[:117] + "...")
-            y -= 5 * mm
+    # =========================
+    # GLOBAL WEIGHTS
+    # =========================
+    elements.append(Paragraph("<b>Bobot Global Sub-Kriteria (Top 20)</b>", styles["Heading2"]))
 
-    y -= 6 * mm
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "Ringkasan Konsistensi (CI / CR):")
-    y -= 6 * mm
-    c.setFont("Helvetica", 9)
-    c.drawString(x + 2 * mm, y, f"Kriteria Utama — CI: {cons.get('CI',0):.4f} , CR: {cons.get('CR',0):.4f}")
-    y -= 6 * mm
+    df_global = pd.DataFrame(res.get("global", [])) \
+        .sort_values("GlobalWeight", ascending=False) \
+        .head(20)
 
-    local = res.get("local", {})
-    for grp, info in local.items():
-        grp_cons = info.get("cons", {})
-        if grp_cons.get("CR", 0) > 0.1:
-            if y < margin + 15 * mm:
-                c.showPage()
-                y = height - margin
-            c.drawString(x + 2 * mm, y, f"Perhatian: CR>0.1 pada {grp} (CR={grp_cons.get('CR'):.3f})")
-            y -= 5 * mm
+    table_data = [["Kriteria", "Sub-Kriteria", "Bobot Global"]]
+    for _, r in df_global.iterrows():
+        table_data.append([
+            r["Kriteria"],
+            r["SubKriteria"],
+            f"{r['GlobalWeight']:.6f}"
+        ])
 
-    c.showPage()
-    c.save()
-    bio.seek(0)
-    return bio
+    table = Table(table_data, colWidths=[180, 180, 70])
+    table.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('VALIGN', (0,0), (-1,-1), 'TOP')
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 14))
+
+    # =========================
+    # CR WARNING
+    # =========================
+    elements.append(Paragraph("<b>Ringkasan Konsistensi</b>", styles["Heading2"]))
+    for grp, info in res.get("local", {}).items():
+        cr = info.get("cons", {}).get("CR", 0)
+        if cr > 0.1:
+            elements.append(Paragraph(
+                f"⚠ <b>{grp}</b> memiliki CR = {cr:.3f} (tidak konsisten)",
+                styles["Normal"]
+            ))
+
+    # =========================
+    # BUILD PDF
+    # =========================
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.enums import TA_LEFT
+from reportlab.lib import colors
+
+def generate_pdf_bytes(submission_row):
+    if canvas is None:
+        raise RuntimeError("reportlab belum terpasang")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
+
+    styles = getSampleStyleSheet()
+    styles["Normal"].fontSize = 9
+    styles["Heading1"].fontSize = 14
+    styles["Heading2"].fontSize = 11
+
+    elements = []
+
+    # =========================
+    # HEADER
+    # =========================
+    elements.append(Paragraph(
+        "<b>Laporan Hasil AHP — Penataan Ruang Publik</b>",
+        styles["Heading1"]
+    ))
+    elements.append(Spacer(1, 10))
+
+    meta = f"""
+    <b>User:</b> {submission_row.get('username','')}<br/>
+    <b>Job Items:</b> {submission_row.get('job_items','')}<br/>
+    <b>Waktu:</b> {submission_row.get('timestamp','')}
+    """
+    elements.append(Paragraph(meta, styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    res = submission_row.get("result", {}) or {}
+
+    # =========================
+    # KRITERIA UTAMA
+    # =========================
+    elements.append(Paragraph("<b>Bobot Kriteria Utama</b>", styles["Heading2"]))
+    table_data = [["Kriteria", "Bobot"]]
+    for k, w in zip(res["main"]["keys"], res["main"]["weights"]):
+        table_data.append([k, f"{w:.4f}"])
+
+    table = Table(table_data, colWidths=[350, 80])
+    table.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 10))
+
+    cons = res["main"]["cons"]
+    elements.append(Paragraph(
+        f"CI = {cons.get('CI',0):.4f} | CR = {cons.get('CR',0):.4f}",
+        styles["Normal"]
+    ))
+    elements.append(Spacer(1, 14))
+
+    # =========================
+    # GLOBAL WEIGHTS
+    # =========================
+    elements.append(Paragraph("<b>Bobot Global Sub-Kriteria (Top 20)</b>", styles["Heading2"]))
+
+    df_global = pd.DataFrame(res.get("global", [])) \
+        .sort_values("GlobalWeight", ascending=False) \
+        .head(20)
+
+    table_data = [["Kriteria", "Sub-Kriteria", "Bobot Global"]]
+    for _, r in df_global.iterrows():
+        table_data.append([
+            r["Kriteria"],
+            r["SubKriteria"],
+            f"{r['GlobalWeight']:.6f}"
+        ])
+
+    table = Table(table_data, colWidths=[180, 180, 70])
+    table.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('VALIGN', (0,0), (-1,-1), 'TOP')
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 14))
+
+    # =========================
+    # CR WARNING
+    # =========================
+    elements.append(Paragraph("<b>Ringkasan Konsistensi</b>", styles["Heading2"]))
+    for grp, info in res.get("local", {}).items():
+        cr = info.get("cons", {}).get("CR", 0)
+        if cr > 0.1:
+            elements.append(Paragraph(
+                f"⚠ <b>{grp}</b> memiliki CR = {cr:.3f} (tidak konsisten)",
+                styles["Normal"]
+            ))
+
+    # =========================
+    # BUILD PDF
+    # =========================
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
 
 # ------------------------------
 # Supabase-backed DB operations (with job_items)
@@ -933,3 +1070,4 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # EOF
+
