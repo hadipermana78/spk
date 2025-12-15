@@ -193,23 +193,15 @@ def consistency_metrics(mat, weights):
 # PDF generation (reportlab)
 # ------------------------------
 
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
-def draw_paragraph(c, text, x, y, max_width, leading=11):
+
+
+def make_table(data, col_widths):
     """
-    Menggambar teks panjang ke PDF dengan word-wrapping otomatis.
-    Mengembalikan posisi y terbaru.
+    Membuat tabel ReportLab dengan text wrapping (tidak terpotong).
     """
-    textobject = c.beginText(x, y)
-    textobject.setLeading(leading)
-    lines = simpleSplit(text, c._fontname, c._fontsize, max_width)
-    for line in lines:
-        textobject.textLine(line)
-    c.drawText(textobject)
-    return y - leading * len(lines)
-    def make_table(data, col_widths):
     styles = getSampleStyleSheet()
     styleN = styles["Normal"]
 
@@ -225,16 +217,17 @@ def draw_paragraph(c, text, x, y, max_width, leading=11):
 
     table = Table(wrapped_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
-        ("GRID", (0,0), (-1,-1), 0.5, colors.black),
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("FONT", (0,0), (-1,0), "Helvetica-Bold"),
-        ("LEFTPADDING", (0,0), (-1,-1), 6),
-        ("RIGHTPADDING", (0,0), (-1,-1), 6),
-        ("TOPPADDING", (0,0), (-1,-1), 4),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONT", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     return table
+
 
 def generate_pdf_bytes(submission_row):
     if canvas is None:
@@ -259,6 +252,7 @@ def generate_pdf_bytes(submission_row):
             styles["Title"]
         )
     )
+    elements.append(Spacer(1, 12))
 
     meta_text = (
         f"<b>User / Pakar:</b> {submission_row.get('username','')}<br/>"
@@ -266,30 +260,40 @@ def generate_pdf_bytes(submission_row):
         f"<b>Waktu:</b> {submission_row.get('timestamp','')}"
     )
     elements.append(Paragraph(meta_text, styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph("<br/><b>1. Bobot Kriteria Utama</b>", styles["Heading2"]))
+    # 1. Kriteria Utama
+    elements.append(Paragraph("<b>1. Bobot Kriteria Utama</b>", styles["Heading2"]))
 
     main = submission_row["result"]["main"]
     table_data = [["No", "Kriteria", "Bobot"]]
-
     for i, (k, w) in enumerate(zip(main["keys"], main["weights"]), start=1):
         table_data.append([str(i), k, f"{w:.4f}"])
 
-    elements.append(make_table(table_data, [30, 360, 80]))
+    elements.append(make_table(table_data, [30, 350, 80]))
+    elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph("<br/><b>2. Bobot Global Sub-Kriteria (Top 20)</b>", styles["Heading2"]))
+    # 2. Global Sub-Kriteria
+    elements.append(Paragraph("<b>2. Bobot Global Sub-Kriteria (Top 20)</b>", styles["Heading2"]))
 
     global_df = pd.DataFrame(submission_row["result"]["global"])
     global_df = global_df.sort_values("GlobalWeight", ascending=False).head(20)
 
     table_data = [["No", "Sub-Kriteria", "Kriteria", "Bobot Global"]]
     for i, row in enumerate(global_df.itertuples(), start=1):
-        table_data.append([str(i), row.SubKriteria, row.Kriteria, f"{row.GlobalWeight:.6f}"])
+        table_data.append([
+            str(i),
+            row.SubKriteria,
+            row.Kriteria,
+            f"{row.GlobalWeight:.6f}"
+        ])
 
-    elements.append(make_table(table_data, [30, 220, 160, 70]))
+    elements.append(make_table(table_data, [30, 220, 150, 80]))
+    elements.append(Spacer(1, 12))
 
+    # 3. Konsistensi
     cons = main["cons"]
-    elements.append(Paragraph("<br/><b>3. Ringkasan Konsistensi</b>", styles["Heading2"]))
+    elements.append(Paragraph("<b>3. Ringkasan Konsistensi</b>", styles["Heading2"]))
     elements.append(
         Paragraph(
             f"Kriteria Utama — CI: {cons.get('CI',0):.4f} | CR: {cons.get('CR',0):.4f}",
@@ -957,6 +961,7 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # EOF
+
 
 
 
