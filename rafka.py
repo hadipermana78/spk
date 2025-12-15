@@ -238,18 +238,6 @@ def draw_paragraph(c, text, x, y, max_width, leading=11):
 
 def generate_pdf_bytes(submission_row):
     if canvas is None:
-        raise RuntimeError("reportlab not installed. Install with `pip install reportlab`.")
-
-    bio = BytesIO()
-    c = canvas.Canvas(bio, pagesize=A4)
-    width, height = A4
-    margin = 18 * mm
-    x = margin
-    y = height - margin
-    max_w = width - margin * 2
-
-    def generate_pdf_bytes(submission_row):
-    if canvas is None:
         raise RuntimeError("reportlab not installed")
 
     buffer = BytesIO()
@@ -273,11 +261,11 @@ def generate_pdf_bytes(submission_row):
         styles["Title"]
     ))
 
-    meta_text = f"""
-    <b>User / Pakar:</b> {submission_row.get("username","")}<br/>
-    <b>Job Items:</b> {submission_row.get("job_items","")}<br/>
-    <b>Waktu:</b> {submission_row.get("timestamp","")}
-    """
+    meta_text = (
+        f"<b>User / Pakar:</b> {submission_row.get('username','')}<br/>"
+        f"<b>Job Items:</b> {submission_row.get('job_items','')}<br/>"
+        f"<b>Waktu:</b> {submission_row.get('timestamp','')}"
+    )
     elements.append(Paragraph(meta_text, styles["Normal"]))
 
     elements.append(Paragraph("<br/><b>1. Bobot Kriteria Utama</b>", styles["Heading2"]))
@@ -287,6 +275,7 @@ def generate_pdf_bytes(submission_row):
     # ======================
     main = submission_row["result"]["main"]
     table_data = [["No", "Kriteria", "Bobot"]]
+
     for i, (k, w) in enumerate(zip(main["keys"], main["weights"]), start=1):
         table_data.append([str(i), k, f"{w:.4f}"])
 
@@ -304,6 +293,7 @@ def generate_pdf_bytes(submission_row):
     global_df = global_df.sort_values("GlobalWeight", ascending=False).head(20)
 
     table_data = [["No", "Sub-Kriteria", "Kriteria", "Bobot Global"]]
+
     for i, row in enumerate(global_df.itertuples(), start=1):
         table_data.append([
             str(i),
@@ -331,7 +321,6 @@ def generate_pdf_bytes(submission_row):
     doc.build(elements)
     buffer.seek(0)
     return buffer
-
 
 # ------------------------------
 # Supabase-backed DB operations (with job_items)
@@ -989,6 +978,7 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # EOF
+
 
 
 
