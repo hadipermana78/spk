@@ -253,13 +253,12 @@ def generate_pdf_bytes(submission_row):
     styles = getSampleStyleSheet()
     elements = []
 
-    # ======================
-    # HEADER
-    # ======================
-    elements.append(Paragraph(
-        "<b>Laporan Hasil AHP – Penataan Ruang Publik</b>",
-        styles["Title"]
-    ))
+    elements.append(
+        Paragraph(
+            "<b>Laporan Hasil AHP – Penataan Ruang Publik</b>",
+            styles["Title"]
+        )
+    )
 
     meta_text = (
         f"<b>User / Pakar:</b> {submission_row.get('username','')}<br/>"
@@ -270,53 +269,33 @@ def generate_pdf_bytes(submission_row):
 
     elements.append(Paragraph("<br/><b>1. Bobot Kriteria Utama</b>", styles["Heading2"]))
 
-    # ======================
-    # TABEL KRITERIA UTAMA
-    # ======================
     main = submission_row["result"]["main"]
     table_data = [["No", "Kriteria", "Bobot"]]
 
     for i, (k, w) in enumerate(zip(main["keys"], main["weights"]), start=1):
         table_data.append([str(i), k, f"{w:.4f}"])
 
-    elements.append(make_table(
-        table_data,
-        col_widths=[30, 360, 80]
-    ))
+    elements.append(make_table(table_data, [30, 360, 80]))
 
-    # ======================
-    # TABEL GLOBAL TOP 20
-    # ======================
     elements.append(Paragraph("<br/><b>2. Bobot Global Sub-Kriteria (Top 20)</b>", styles["Heading2"]))
 
     global_df = pd.DataFrame(submission_row["result"]["global"])
     global_df = global_df.sort_values("GlobalWeight", ascending=False).head(20)
 
     table_data = [["No", "Sub-Kriteria", "Kriteria", "Bobot Global"]]
-
     for i, row in enumerate(global_df.itertuples(), start=1):
-        table_data.append([
-            str(i),
-            row.SubKriteria,
-            row.Kriteria,
-            f"{row.GlobalWeight:.6f}"
-        ])
+        table_data.append([str(i), row.SubKriteria, row.Kriteria, f"{row.GlobalWeight:.6f}"])
 
-    elements.append(make_table(
-        table_data,
-        col_widths=[30, 220, 160, 70]
-    ))
+    elements.append(make_table(table_data, [30, 220, 160, 70]))
 
-    # ======================
-    # KONSISTENSI
-    # ======================
     cons = main["cons"]
     elements.append(Paragraph("<br/><b>3. Ringkasan Konsistensi</b>", styles["Heading2"]))
-
-    elements.append(Paragraph(
-        f"Kriteria Utama — CI: {cons.get('CI',0):.4f} | CR: {cons.get('CR',0):.4f}",
-        styles["Normal"]
-    ))
+    elements.append(
+        Paragraph(
+            f"Kriteria Utama — CI: {cons.get('CI',0):.4f} | CR: {cons.get('CR',0):.4f}",
+            styles["Normal"]
+        )
+    )
 
     doc.build(elements)
     buffer.seek(0)
@@ -978,6 +957,7 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # EOF
+
 
 
 
