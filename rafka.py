@@ -13,6 +13,10 @@ import hashlib
 import os
 import zipfile  # <-- baru: untuk mengemas PDF ke ZIP
 from reportlab.lib.utils import simpleSplit
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+
 
 from supabase import create_client
 
@@ -205,6 +209,33 @@ def draw_paragraph(c, text, x, y, max_width, leading=11):
         textobject.textLine(line)
     c.drawText(textobject)
     return y - leading * len(lines)
+    def make_table(data, col_widths):
+    styles = getSampleStyleSheet()
+    styleN = styles["Normal"]
+
+    wrapped_data = []
+    for row in data:
+        wrapped_row = []
+        for cell in row:
+            if isinstance(cell, str):
+                wrapped_row.append(Paragraph(cell, styleN))
+            else:
+                wrapped_row.append(cell)
+        wrapped_data.append(wrapped_row)
+
+    table = Table(wrapped_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("GRID", (0,0), (-1,-1), 0.5, colors.black),
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("FONT", (0,0), (-1,0), "Helvetica-Bold"),
+        ("LEFTPADDING", (0,0), (-1,-1), 6),
+        ("RIGHTPADDING", (0,0), (-1,-1), 6),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    return table
+
 def generate_pdf_bytes(submission_row):
     if canvas is None:
         raise RuntimeError("reportlab not installed. Install with `pip install reportlab`.")
@@ -217,125 +248,90 @@ def generate_pdf_bytes(submission_row):
     y = height - margin
     max_w = width - margin * 2
 
+    def generate_pdf_bytes(submission_row):
+    if canvas is None:
+        raise RuntimeError("reportlab not installed")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
     # ======================
     # HEADER
     # ======================
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(x, y, "Laporan Hasil AHP — Penataan Ruang Publik")
-    y -= 10 * mm
+    elements.append(Paragraph(
+        "<b>Laporan Hasil AHP – Penataan Ruang Publik</b>",
+        styles["Title"]
+    ))
 
-    c.setFont("Helvetica", 9)
-    username = submission_row.get("username", "")
-    job_items = submission_row.get("job_items", "")
-    if isinstance(job_items, list):
-        job_items = ", ".join(job_items)
+    meta_text = f"""
+    <b>User / Pakar:</b> {submission_row.get("username","")}<br/>
+    <b>Job Items:</b> {submission_row.get("job_items","")}<br/>
+    <b>Waktu:</b> {submission_row.get("timestamp","")}
+    """
+    elements.append(Paragraph(meta_text, styles["Normal"]))
 
-    y = draw_paragraph(c, f"User / Pakar : {username}", x, y, max_w)
-    y -= 2 * mm
-    if job_items:
-        y = draw_paragraph(c, f"Job Items / Keahlian : {job_items}", x, y, max_w)
-        y -= 2 * mm
-    y = draw_paragraph(c, f"Waktu : {submission_row.get('timestamp','')}", x, y, max_w)
-    y -= 6 * mm
-
-    res = submission_row.get("result", {}) or {}
+    elements.append(Paragraph("<br/><b>1. Bobot Kriteria Utama</b>", styles["Heading2"]))
 
     # ======================
-    # BOBOT KRITERIA UTAMA
+    # TABEL KRITERIA UTAMA
     # ======================
-    main = res.get("main", {})
-    keys = main.get("keys", [])
-    weights = main.get("weights", [])
-    cons = main.get("cons", {})
+    main = submission_row["result"]["main"]
+    table_data = [["No", "Kriteria", "Bobot"]]
+    for i, (k, w) in enumerate(zip(main["keys"], main["weights"]), start=1):
+        table_data.append([str(i), k, f"{w:.4f}"])
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "1. Bobot Kriteria Utama")
-    y -= 6 * mm
-    c.setFont("Helvetica", 9)
-
-    for k, w in zip(keys, weights):
-        if y < margin + 25 * mm:
-            c.showPage()
-            c.setFont("Helvetica", 9)
-            y = height - margin
-
-        y = draw_paragraph(
-            c,
-            f"{k} — {w:.4f}",
-            x + 3 * mm,
-            y,
-            max_w - 3 * mm
-        )
-        y -= 2 * mm
+    elements.append(make_table(
+        table_data,
+        col_widths=[30, 360, 80]
+    ))
 
     # ======================
-    # BOBOT GLOBAL (TOP 20)
+    # TABEL GLOBAL TOP 20
     # ======================
-    y -= 4 * mm
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "2. Bobot Global Sub-Kriteria (Top 20)")
-    y -= 6 * mm
-    c.setFont("Helvetica", 9)
+    elements.append(Paragraph("<br/><b>2. Bobot Global Sub-Kriteria (Top 20)</b>", styles["Heading2"]))
 
-    gw = pd.DataFrame(res.get("global", []))
-    if not gw.empty:
-        gw = gw.sort_values("GlobalWeight", ascending=False).head(20)
-        for _, row in gw.iterrows():
-            if y < margin + 30 * mm:
-                c.showPage()
-                c.setFont("Helvetica", 9)
-                y = height - margin
+    global_df = pd.DataFrame(submission_row["result"]["global"])
+    global_df = global_df.sort_values("GlobalWeight", ascending=False).head(20)
 
-            text = (
-                f"{row.get('SubKriteria','')} "
-                f"({row.get('Kriteria','')}) — "
-                f"{row.get('GlobalWeight',0):.6f}"
-            )
+    table_data = [["No", "Sub-Kriteria", "Kriteria", "Bobot Global"]]
+    for i, row in enumerate(global_df.itertuples(), start=1):
+        table_data.append([
+            str(i),
+            row.SubKriteria,
+            row.Kriteria,
+            f"{row.GlobalWeight:.6f}"
+        ])
 
-            y = draw_paragraph(
-                c,
-                text,
-                x + 3 * mm,
-                y,
-                max_w - 3 * mm
-            )
-            y -= 3 * mm
+    elements.append(make_table(
+        table_data,
+        col_widths=[30, 220, 160, 70]
+    ))
 
     # ======================
     # KONSISTENSI
     # ======================
-    y -= 4 * mm
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "3. Ringkasan Konsistensi")
-    y -= 6 * mm
-    c.setFont("Helvetica", 9)
+    cons = main["cons"]
+    elements.append(Paragraph("<br/><b>3. Ringkasan Konsistensi</b>", styles["Heading2"]))
 
-    y = draw_paragraph(
-        c,
+    elements.append(Paragraph(
         f"Kriteria Utama — CI: {cons.get('CI',0):.4f} | CR: {cons.get('CR',0):.4f}",
-        x + 3 * mm,
-        y,
-        max_w - 3 * mm
-    )
+        styles["Normal"]
+    ))
 
-    # cek CR lokal > 0.1
-    local = res.get("local", {})
-    for grp, info in local.items():
-        cr = info.get("cons", {}).get("CR", 0)
-        if cr > 0.1:
-            y -= 2 * mm
-            y = draw_paragraph(
-                c,
-                f"⚠ Perhatian: CR > 0.1 pada {grp} (CR = {cr:.3f})",
-                x + 3 * mm,
-                y,
-                max_w - 3 * mm
-            )
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
 
-    c.showPage()
-    c.save()
-    bio.seek(0)
-    return bio
 
 # ------------------------------
 # Supabase-backed DB operations (with job_items)
@@ -993,5 +989,6 @@ elif page == "Laporan Final Gabungan Pakar" and user["is_admin"]:
         st.warning(str(e))
 
 # EOF
+
 
 
